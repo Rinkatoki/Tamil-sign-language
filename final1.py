@@ -19,6 +19,10 @@ COOLDOWN = 0.7
 # ----------------------------
 delete_locked = False
 space_locked = False
+delete_gesture_active = False
+gesture_mode = None   # None | "DELETE" | "SPACE"
+
+
 
 
 model = joblib.load(MODEL_PATH)
@@ -42,6 +46,9 @@ buffer_right = deque(maxlen=BUFFER_SIZE)
 text_buffer = ""
 last_added = ""
 last_add_time = 0
+current_word = ""
+word_list = []
+
 
 # Load font
 try:
@@ -114,6 +121,11 @@ while True:
         if thumbs_down == 1:
             if not space_locked and now - last_add_time > COOLDOWN:
                 text_buffer += " "
+                if current_word.strip():
+                    print("Predicted word:", current_word)
+                    word_list.append(current_word)
+                current_word = ""
+
                 last_add_time = now
                 last_added = "SPACE"
                 space_locked = True
@@ -121,15 +133,31 @@ while True:
             space_locked = False
 
 
-        # DELETE (2 thumbs down)
+        # DELETE (2 thumbs down) – safe, single delete
         if thumbs_down == 2:
-            if not delete_locked and len(text_buffer) > 0:
+            if not delete_gesture_active and len(text_buffer) > 0:
+
+                # delete from text buffer
+                removed = text_buffer[-1]
                 text_buffer = text_buffer[:-1]
+
+                # sync word buffers
+                if removed == " ":
+                    if len(word_list) > 0:
+                        current_word = word_list.pop()
+                    else:
+                        current_word = ""
+                else:
+                    if len(current_word) > 0:
+                        current_word = current_word[:-1]
+
                 last_add_time = now
                 last_added = "DELETE"
-                delete_locked = True
+                delete_gesture_active = True
         else:
-            delete_locked = False
+            delete_gesture_active = False
+
+
 
 
         # -------------------------
@@ -156,6 +184,8 @@ while True:
                     now - last_add_time > COOLDOWN
                 ):
                     text_buffer += most
+                    current_word += most
+
                     last_added = most
                     last_add_time = now
 
@@ -167,6 +197,7 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+print("Sentence so far:", " ".join(word_list))
 cap.release()
 cv2.destroyAllWindows()
 hands.close()
